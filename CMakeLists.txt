@@ -16,3 +16,7 @@ add_subdirectory(08_tcp)
 add_subdirectory(09_server_model)
 add_subdirectory(10_network_advanced)
 add_subdirectory(11_sqlite)
+
+add_subdirectory(31_network_socket)
+add_subdirectory(32_socket_type_protocol)
+add_subdirectory(33_address_family_data_sequence)
