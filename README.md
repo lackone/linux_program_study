@@ -17,5 +17,7 @@
 
 《TCP/IP网络编程》笔记
 ```
-31_network_socket   理解网络编程和套接字
+31_network_socket               理解网络编程和套接字
+32_socket_type_protocol         套接字类型与协议设置
+33_address_family_data_sequence 地址族与数据序列
 ```
