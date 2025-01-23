@@ -201,33 +201,32 @@ void windows_io_server_test(int port) {
         tmps = reads;
         timeout.tv_sec = 5;
         timeout.tv_usec = 0;
-        if ((fd = select(max_fd + 1, &tmps, 0, 0, &timeout)) == -1) {
+        if ((fd = select(0, &tmps, 0, 0, &timeout)) == -1) {
             break;
         }
         if (fd == 0) {
             continue;
         }
 
-        for (int i = 0; i < max_fd + 1; i++) {
-            if (FD_ISSET(i, &tmps)) {
-                if (i == sock) {
+        for (int i = 0; i < reads.fd_count; i++) {
+            if (FD_ISSET(reads.fd_array[i], &tmps)) {
+                if (reads.fd_array[i] == sock) {
                     clt_sock = accept(sock, (struct sockaddr *) &clt_addr, &clt_addr_len);
                     if (clt_sock == -1) {
                         continue;
                     }
 
                     FD_SET(clt_sock, &reads);
-                    max_fd = clt_sock > max_fd ? clt_sock : max_fd;
 
                     printf("client connect %d\n", clt_sock);
                 } else {
-                    len = recv(i, buf, sizeof(buf), 0);
+                    len = recv(reads.fd_array[i], buf, sizeof(buf), 0);
                     if (len == 0) {
-                        FD_CLR(i, &reads);
-                        closesocket(i);
-                        printf("close client %d\n", i);
+                        FD_CLR(reads.fd_array[i], &reads);
+                        closesocket(tmps.fd_array[i]);
+                        printf("close client %d\n", tmps.fd_array[i]);
                     } else {
-                        send(i, buf, len, 0);
+                        send(reads.fd_array[i], buf, len, 0);
                     }
                 }
             }
@@ -261,7 +260,7 @@ void windows_io_client_test(int port) {
         if (strncmp(buf, "q", 1) == 0 ||
             strncmp(buf, "Q", 1) == 0) {
             break;
-            }
+        }
 
         send(sock, buf, strlen(buf), 0);
         len = recv(sock, buf, sizeof(buf), 0);
