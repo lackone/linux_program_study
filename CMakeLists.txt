@@ -35,3 +35,6 @@ add_subdirectory(45_socket_standard_io)
 add_subdirectory(46_io_stream_separate)
 add_subdirectory(47_epoll)
 add_subdirectory(48_multi_thread_server)
+
+add_subdirectory(71_tcp_and_ip)
+add_subdirectory(72_ip)
