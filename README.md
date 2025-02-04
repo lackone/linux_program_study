@@ -42,6 +42,11 @@
 《Linux高性能服务器编程》笔记
 
 ```
-71_tcp_and_ip       TCP/IP协议族
-72_ip               IP协议详解
+71_tcp_and_ip           TCP/IP协议族
+72_ip                   IP协议详解
+73_tcp                  TCP协议详解
+74_tcp_ip_case          TCP/IP通信案例
+75_socket_api           linux网络编程基础api
+76_advanced_io          高级I/O函数
+77_server_specification linux服务器程序规范
 ```
