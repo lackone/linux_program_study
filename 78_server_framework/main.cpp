@@ -1,4 +1,8 @@
+#include <cstring>
 #include <iostream>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 using namespace std;
 
@@ -89,6 +93,222 @@ using namespace std;
 //    }
 //}
 
+//判断http头部结束的依据是遇到一个空行，该空行仅包含一对回车换行符
+//如果一次读操作没有读入http请求的整个头部，即没有遇到空行，那么必须等待客户继续写数据并再次读入。
+
+enum CHECK_STATE {
+    CHECK_STATE_REQUEST_LINE = 0, //分析请求行
+    CHECK_STATE_HEADER //分析头部字段
+};
+
+enum LINE_STATUS {
+    LINE_OK = 0, //读取到完整行
+    LINE_BAD, //行出错
+    LINE_OPEN //行数据不完整
+};
+
+enum HTTP_CODE {
+    NO_REQUEST,
+    GET_REQUEST,
+    BAD_REQUEST,
+    FORBIDDEN_REQUEST,
+    INTERNAL_ERROR,
+    CLOSED_CONNECTION
+};
+
+const char *str_ret[] = {"i get a correct result\n", "something wrong\n"};
+
+//解析一行内容
+LINE_STATUS line_parse(char *buf, int &chk_index, int &read_index) {
+    char tmp;
+    //chk_index指向buf中当前正在分析的字节
+    //read_index指向buf中客户数据的尾部的下一字节
+    //buf中从0到chk_index字节已经分析完毕，第chk_index到read_index-1字节由下面的循环挨个分析
+    for (; chk_index < read_index; chk_index++) {
+        tmp = buf[chk_index]; //获取分析的字节
+        if (tmp == '\r') {
+            //如果\r是buf中最后一个数据，那么这次的分析没有读取到一个完整的行
+            //返回LINE_OPEN表示还要继续读取客户数据
+            if ((chk_index + 1) == read_index) {
+                return LINE_OPEN; //
+            } else if (buf[chk_index + 1] == '\n') {
+                //如果下一个字符是\n，说明我们成功读取到一个完整的行
+                buf[chk_index++] = '\0'; //把\r置0
+                buf[chk_index++] = '\0'; //把\n置0
+                return LINE_OK;
+            }
+
+            //否则说明请求有问题
+            return LINE_BAD;
+        } else if (tmp == '\n') {
+            if (chk_index > 1 && buf[chk_index - 1] == '\r') {
+                //如果前一个是\r，说明读取到完整的行
+                buf[chk_index - 1] = '\0';
+                buf[chk_index++] = '\0';
+                return LINE_OK;
+            }
+
+            return LINE_BAD;
+        }
+    }
+
+    //如果所有内容分析完毕，没有遇到\r，说明还要继续读取客户端数据
+    return LINE_OPEN;
+}
+
+//分析请求行
+HTTP_CODE request_line_parse(char *tmp, CHECK_STATE &chk_state) {
+    char *url = strpbrk(tmp, " \t");
+    //如果请求行中没有空白字符或\t，说明http请求有问题
+    if (!url) {
+        return BAD_REQUEST;
+    }
+    *url++ = '\0';
+
+    char *method = tmp;
+    //只支持GET方法
+    if (strcasecmp(method, "GET") == 0) {
+        printf("the request method is get\n");
+    } else {
+        return BAD_REQUEST;
+    }
+    //查找url中不在" \t"中出现的字符下标，相当于清空url前面的空白字符
+    url += strspn(url, " \t");
+    char *version = strpbrk(url, " \t");
+    if (!version) {
+        return BAD_REQUEST;
+    }
+    *version++ = '\0';
+    version += strspn(version, " \t");
+    //仅支持HTTP/1.1
+    if (strcasecmp(version, "HTTP/1.1") != 0) {
+        return BAD_REQUEST;
+    }
+    //检查URL是否合法
+    if (strncasecmp(url, "http://", 7) == 0) {
+        url += 7;
+        url = strchr(url, '/');
+    }
+    if (!url || url[0] != '/') {
+        return BAD_REQUEST;
+    }
+    printf("the request url is %s\n", url);
+
+    //请求行处理完毕，转移到头部字段的析
+    chk_state = CHECK_STATE_HEADER;
+
+    return NO_REQUEST;
+}
+
+//分析头部字段
+HTTP_CODE headers_parse(char *tmp) {
+    //遇到一个空行，说明我们得到了一个正确的HTTP请求
+    if (tmp[0] == '\0') {
+        return GET_REQUEST;
+    } else if (strncasecmp(tmp, "Host:", 5) == 0) {
+        tmp += 5;
+        tmp += strspn(tmp, " \t");
+        printf("the request host is %s\n", tmp);
+    } else {
+        printf("i can not handle this header\n");
+    }
+    return NO_REQUEST;
+}
+
+//分析HTTP请求的入口函数
+HTTP_CODE content_parse(char *buf, int &chk_index, CHECK_STATE &chk_state, int &read_index, int &start_line) {
+    LINE_STATUS line_status = LINE_OK;
+    HTTP_CODE ret_code = NO_REQUEST;
+
+    //从buf中取出所有完整的行
+    while ((line_status = line_parse(buf, chk_index, read_index)) == LINE_OK) {
+        char *tmp = buf + start_line;
+        start_line = chk_index; //记录下一行起始位置
+
+        switch (chk_state) {
+            case CHECK_STATE_REQUEST_LINE: {
+                printf("line %s\n", tmp);
+                ret_code = request_line_parse(tmp, chk_state);
+                if (ret_code == BAD_REQUEST) {
+                    return BAD_REQUEST;
+                }
+                break;
+            }
+            case CHECK_STATE_HEADER: {
+                printf("header %s\n", tmp);
+                ret_code = headers_parse(tmp);
+                if (ret_code == BAD_REQUEST) {
+                    return BAD_REQUEST;
+                } else if (ret_code == GET_REQUEST) {
+                    return GET_REQUEST;
+                }
+                break;
+            }
+            default: {
+                return INTERNAL_ERROR;
+            }
+        }
+    }
+
+    //如果没有读取到一个完整的行，表示还需要继续读取客户端数据
+    if (line_status == LINE_OPEN) {
+        return NO_REQUEST;
+    } else {
+        return BAD_REQUEST;
+    }
+}
+
+void server_test(int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(sock, (struct sockaddr *) &addr, sizeof(addr));
+    listen(sock, 5);
+
+    sockaddr_in client;
+    socklen_t client_len = sizeof(client);
+    int cfd = accept(sock, (struct sockaddr *) &client, &client_len);
+
+    char buf[4096] = {0};
+
+    int len = 0;
+    int read_index = 0; //已经读取的字节数
+    int chk_index = 0; //已经分析的字节数
+    int start_line = 0; //行在buf中的起始位置
+
+    CHECK_STATE chk_state = CHECK_STATE_REQUEST_LINE;
+    while (1) {
+        len = recv(cfd, buf + read_index, sizeof(buf) - read_index, 0);
+        if (len == -1) {
+            printf("read error\n");
+            break;
+        } else if (len == 0) {
+            printf("remote client has closed the connection\n");
+            break;
+        }
+        read_index += len;
+        //分析已经获得的客户端数据
+        HTTP_CODE ret = content_parse(buf, chk_index, chk_state, read_index, start_line);
+        if (ret == NO_REQUEST) {
+            continue;
+        } else if (ret == GET_REQUEST) {
+            //得到一个完整的请求
+            send(cfd, str_ret[0], strlen(str_ret[0]), 0);
+            break;
+        } else {
+            //发生错误
+            send(cfd, str_ret[1], strlen(str_ret[1]), 0);
+            break;
+        }
+    }
+
+    close(cfd);
+
+    close(sock);
+}
+
 //提高服务器性能的其他建议
 //池
 //池是一组资源的集合，在服务器启动之初就被完全创建好并初始化，需要时直接从池中获取，处理完后，把资源放回池中。
@@ -103,6 +323,7 @@ using namespace std;
 //锁
 //共享资源的加锁保护，如果必须使用锁，则可以考虑减小锁的粒度，比如使用读写锁。
 
-int main() {
+int main(int argc, char *argv[]) {
+    server_test(atoi(argv[1]));
     return 0;
 }
