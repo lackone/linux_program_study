@@ -603,16 +603,95 @@ void chat_room_client(int port) {
     close(sock);
 }
 
+//同时处理TCP和UDP服务
+//
+void addfd3(int epfd, int fd) {
+    epoll_event ev;
+    ev.data.fd = fd;
+    ev.events = EPOLLIN | EPOLLET;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+    setnonblocking(fd);
+}
+
+void handle_tcp_udp(int port) {
+    //创建tcp socket，并绑定端口
+    int tcp_sock = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(tcp_sock, (struct sockaddr *) &addr, sizeof(addr));
+    listen(tcp_sock, 5);
+
+    //创建udp socket，并绑定端口
+    int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(udp_sock, (struct sockaddr *) &addr, sizeof(addr));
+
+    epoll_event evs[1024];
+    int epfd = epoll_create(1024);
+    addfd3(epfd, tcp_sock);
+    addfd3(epfd, udp_sock);
+
+    while (1) {
+        int ret = epoll_wait(epfd, evs, 1024, -1);
+        if (ret < 0) {
+            printf("epoll_wait error\n");
+            break;
+        }
+        for (int i = 0; i < ret; i++) {
+            int fd = evs[i].data.fd;
+            if (fd == tcp_sock) {
+                sockaddr_in client;
+                socklen_t client_len = sizeof(client);
+                int cfd = accept(tcp_sock, (struct sockaddr *) &client, &client_len);
+                addfd3(epfd, cfd);
+            } else if (fd == udp_sock) {
+                char buf[1024] = {0};
+                sockaddr_in client;
+                socklen_t client_len = sizeof(client);
+                ret = recvfrom(fd, buf, sizeof(buf) - 1, 0, (struct sockaddr *) &client, &client_len);
+                if (ret > 0) {
+                    sendto(fd, buf, strlen(buf), 0, (struct sockaddr *) &client, client_len);
+                }
+            } else if (evs[i].events & EPOLLIN) {
+                char buf[1024] = {0};
+                while (1) {
+                    memset(buf, 0, sizeof(buf));
+                    ret = recv(fd, buf, sizeof(buf) - 1, 0);
+                    if (ret < 0) {
+                        if ((ret == EAGAIN) || (ret == EWOULDBLOCK)) {
+                            break;
+                        }
+                        close(fd);
+                        break;
+                    } else if (ret == 0) {
+                        close(fd);
+                    } else {
+                        send(fd, buf, ret, 0);
+                    }
+                }
+            }
+        }
+    }
+
+    close(tcp_sock);
+    close(udp_sock);
+}
+
 
 int main(int argc, char *argv[]) {
     //select_oob_test(atoi(argv[1]));
     //epoll_server_test(atoi(argv[1]));
     //epolloneshot_test(atoi(argv[1]));
     //unblock_connect(argv[1], atoi(argv[2]), 10);
-    if (strcmp(argv[1], "server") == 0) {
-        chat_room_server(atoi(argv[2]));
-    } else if (strcmp(argv[1], "client") == 0) {
-        chat_room_client(atoi(argv[2]));
-    }
+    //if (strcmp(argv[1], "server") == 0) {
+    //    chat_room_server(atoi(argv[2]));
+    //} else if (strcmp(argv[1], "client") == 0) {
+    //    chat_room_client(atoi(argv[2]));
+    //}
+    handle_tcp_udp(atoi(argv[1]));
     return 0;
 }

@@ -1,5 +1,7 @@
 # linux_program_study
 
+学习以下书籍时写的代码，全部手打，可能与书中代码有出入，代码都经过运行测试。
+
 《linux系统编程慕课版》笔记
 
 ```
@@ -49,4 +51,7 @@
 75_socket_api           linux网络编程基础api
 76_advanced_io          高级I/O函数
 77_server_specification linux服务器程序规范
+78_server_framework     高性能服务器程序框架
+79_io_reuse             I/O复用
+80_signal               信号
 ```
