@@ -1,22 +1,23 @@
 # linux_program_study
 
 学习以下书籍时写的代码，全部手打，可能与书中代码有出入，代码都经过运行测试。
+
 开发工具 clion
 
 《linux系统编程慕课版》千锋教育 笔记
 
 ```
-01_file_dir         文件与目录
-02_io               I/O
-03_process          进程
-04_thread           多线程
-05_ipc              早期进程间通信
-06_system_v_ipc     System V IPC
-07_network_overview Linux网络编程概述
-08_tcp              网络基础编程
-09_server_model     服务器模型
-10_network_advanced 网络高级编程
-11_sqlite           SQLite数据库
+01_file_dir                     文件与目录
+02_io                           I/O
+03_process                      进程
+04_thread                       多线程
+05_ipc                          早期进程间通信
+06_system_v_ipc                 System V IPC
+07_network_overview             Linux网络编程概述
+08_tcp                          网络基础编程
+09_server_model                 服务器模型
+10_network_advanced             网络高级编程
+11_sqlite                       SQLite数据库
 ```
 
 《TCP/IP网络编程》尹圣雨 笔记
@@ -45,19 +46,21 @@
 《Linux高性能服务器编程》游双 笔记
 
 ```
-71_tcp_and_ip               TCP/IP协议族
-72_ip                       IP协议详解
-73_tcp                      TCP协议详解
-74_tcp_ip_case              TCP/IP通信案例
-75_socket_api               linux网络编程基础api
-76_advanced_io              高级I/O函数
-77_server_specification     linux服务器程序规范
-78_server_framework         高性能服务器程序框架
-79_io_reuse                 I/O复用
-80_signal                   信号
-81_timer                    定时器
-82_libevent                 高性能I/O框架库libevent
-83_multi_process            多进程编程
-84_multi_threading          多线程编程
-85_process_pool_thread_pool 进程池和线程池
+71_tcp_and_ip                   TCP/IP协议族
+72_ip                           IP协议详解
+73_tcp                          TCP协议详解
+74_tcp_ip_case                  TCP/IP通信案例
+75_socket_api                   linux网络编程基础api
+76_advanced_io                  高级I/O函数
+77_server_specification         linux服务器程序规范
+78_server_framework             高性能服务器程序框架
+79_io_reuse                     I/O复用
+80_signal                       信号
+81_timer                        定时器
+82_libevent                     高性能I/O框架库libevent
+83_multi_process                多进程编程
+84_multi_threading              多线程编程
+85_process_pool_thread_pool     进程池和线程池
+86_server_modulate_debug_test   服务器调制，调试和测试
+87_sys_monitor_tool             系统监测工具
 ```
