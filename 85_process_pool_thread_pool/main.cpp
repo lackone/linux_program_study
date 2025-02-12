@@ -1,5 +1,6 @@
 #include <iostream>
 #include "cgi_conn.h"
+#include "http_conn.h"
 using namespace std;
 
 //进程池 和 线程池
@@ -36,8 +37,94 @@ void cgi_conn_test(int port) {
 
 //半同步/半反应堆线程池实现
 //
+#define MAX_FD 65536
+#define MAX_EVENT_NUM 10000
 
-int main() {
-    cgi_conn_test(8888);
+void show_error(int fd, const char *msg) {
+    printf("%s\n", msg);
+    send(fd, msg, strlen(msg), 0);
+    close(fd);
+}
+
+void http_conn_test(int port) {
+    add_sig(SIGPIPE, SIG_IGN);
+
+    thread_pool<http_conn> *pool = NULL;
+    try {
+        pool = new thread_pool<http_conn>();
+    } catch (...) {
+        printf("thread_pool error\n");
+        return;
+    }
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    struct linger tmp = {1, 0};
+    setsockopt(sock, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
+
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind(sock, (struct sockaddr *) &addr, sizeof(addr));
+    listen(sock, 5);
+
+    epoll_event evs[MAX_EVENT_NUM];
+    int epfd = epoll_create(5);
+    add_fd2(epfd, sock, false);
+    http_conn::_epfd = epfd;
+
+    http_conn *users = new http_conn[MAX_FD];
+    int user_cnt = 0;
+
+    while (1) {
+        int num = epoll_wait(epfd, evs, MAX_EVENT_NUM, -1);
+        if (num < 0 && errno != EINTR) {
+            printf("epoll_wait error\n");
+            break;
+        }
+        for (int i = 0; i < num; i++) {
+            int fd = evs[i].data.fd;
+            if (fd == sock) {
+                sockaddr_in client;
+                socklen_t client_len = sizeof(client);
+                int cfd = accept(sock, (struct sockaddr *) &client, &client_len);
+                if (cfd < 0) {
+                    printf("errno %d\n", errno);
+                    continue;
+                }
+                if (http_conn::_user_cnt >= MAX_FD) {
+                    show_error(cfd, "internal server busy");
+                    continue;
+                }
+                users[cfd].init(cfd, client);
+            } else if (evs[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+                //如果有异常
+                users[fd].close_conn();
+            } else if (evs[i].events & EPOLLIN) {
+                //根据读的结果，决定将任务添加到线程池，还是关闭连接
+                if (users[fd].read()) {
+                    pool->append(&users[fd]);
+                } else {
+                    users[fd].close_conn();
+                }
+            } else if (evs[i].events & EPOLLOUT) {
+                //根据写的结果，是否关闭连接
+                if (!users[fd].write()) {
+                    users[fd].close_conn();
+                }
+            }
+        }
+    }
+
+    close(epfd);
+    close(sock);
+    delete[] users;
+    delete pool;
+}
+
+int main(int argc, char *argv[]) {
+    //cgi_conn_test(atoi(argv[1]));
+    http_conn_test(atoi(argv[1]));
     return 0;
 }
